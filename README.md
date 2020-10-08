@@ -10,7 +10,7 @@ This project has been tested on the following hardware:
   * PSoC 5LP (CY8C5888LTI-LP097)
 
 # References
-This project uses a simple C ring buffer implementation: https://github.com/dhess/c-ringbuf.
+This project uses a simple C ring buffer implementation (provided in src/): https://github.com/dhess/c-ringbuf.
 
 The design of this project is based on the following code: https://github.com/noritan/Design307.
 
