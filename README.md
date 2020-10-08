@@ -1,7 +1,7 @@
 # PSoC-USBUART-Driver
 Turnkey code for PSoC USBUART component.
 
-Includes 2 ring buffers for Rx and Tx so we can hold more than the 64 bytes allowed by USBUART.
+Includes 2 FIFO ring buffers for Rx and Tx so we can hold more than the 64 bytes allowed by USBUART.
 
 Data transmission (Rx and Tx) is handled automatically by interrupts at 2kHz (every 0.5ms).
 
@@ -65,7 +65,7 @@ Descriptor Root = "Manual (Static Allocation)"
 * PLL = 79.5MHz (or as high as you want the MASTER_CLK to be)
 
 ## Macros (see usbuart_driver.h)
-* Size of the FIFO buffers (Rx and Tx): see `<RX/TX>_BUFFER_SIZE`
+* Size of the ring buffers (Rx and Tx): see `<RX/TX>_BUFFER_SIZE`
 
 ## System configurations (.cydwr)
 * Heap Size (bytes) = `RX_BUFFER_SIZE` + `TX_BUFFER_SIZE` + 2 bytes
