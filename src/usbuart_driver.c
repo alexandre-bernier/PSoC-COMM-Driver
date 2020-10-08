@@ -117,12 +117,12 @@ void usbuart_init()
 *  data: Pointer to a uint8 where the byte read will be copied.
 *
 * Return:
-*  uint16: The number of bytes copied.
+*  uint8: The number of bytes copied.
 *
 *******************************************************************************/
-uint16 usbuart_getch(uint8 *data)
+uint8 usbuart_getch(uint8 *data)
 {
-    uint16 count = 1;
+    uint8 count = 1;
     
     // Exit if 'data' is NULL or if the buffer is empty
     if(!data || ringbuf_is_empty(_rxBuffer))
@@ -158,7 +158,7 @@ uint16 usbuart_getch(uint8 *data)
 *******************************************************************************/
 void usbuart_putch(uint8 *data)
 {
-    uint16 count = 1;
+    uint8 count = 1;
     uint8 state;
     
     // Exit if 'data' is NULL

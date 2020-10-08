@@ -110,7 +110,7 @@
 void usbuart_init();
 
 // Single character
-uint16 usbuart_getch(uint8 *data);
+uint8 usbuart_getch(uint8 *data);
 void usbuart_putch(uint8 *data);
 
 // Line
