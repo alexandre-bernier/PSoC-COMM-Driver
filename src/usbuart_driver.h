@@ -66,8 +66,8 @@
 *  this line is uncommented:
 *    #include "usbuart_driver_msg.h"
 *  And fill in the information in the file "usbuart_driver_msg.h".
-*  Otherwise, you can comment the line mentionned previously. It will
-*  deactivate the all functions related to custom messages.
+*  Otherwise, you can comment the line mentionned previously and it will
+*  deactivate all the functions related to custom messages.
 *
 * References:
 *  https://github.com/noritan/Design307
