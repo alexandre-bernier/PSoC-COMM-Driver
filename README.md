@@ -3,6 +3,8 @@ Turnkey code for PSoC USBUART component.
 
 Includes 2 ring buffers for Rx and Tx so we can hold more than the 64 bytes allowed by USBUART.
 
+Data transmission (Rx and Tx) is handled automatically by interrupts at 2kHz (every 0.5ms).
+
 # Compatibility
 This project has been tested on the following hardware:
   * PSoC 5LP (CY8C5888LTI-LP097)
@@ -50,7 +52,7 @@ The following code shows how to do an echo with the 3 different types of message
 ## TopDesign
 Add the following components:
 * 1 x USBUART (named 'USBUART')
-* 1 x Clock (set at 2kHz)
+* 1 x Clock (set at 2kHz, or whichever frequency you wish the data transmission to happen)
 * 1 x ISR (named 'int_usbuart') connected to the 2kHz clock
 
 ## USBUART component configuration
@@ -63,7 +65,7 @@ Descriptor Root = "Manual (Static Allocation)"
 * PLL = 79.5MHz (or as high as you want the MASTER_CLK to be)
 
 ## Macros (see usbuart_driver.h)
-* Size of the FIFO buffers (Rx and Tx): see <RX/TX>_BUFFER_SIZE
+* Size of the FIFO buffers (Rx and Tx): see `<RX/TX>_BUFFER_SIZE`
 
 ## System configurations (.cydwr)
 * Heap Size (bytes) = `RX_BUFFER_SIZE` + `TX_BUFFER_SIZE` + 2 bytes
