@@ -12,8 +12,39 @@ This project uses a simple C ring buffer implementation: https://github.com/dhes
 
 The design of this project is based on the following code: https://github.com/noritan/Design307.
 
-# Instructions
+# Example (main.c)
+The following code shows how to do an echo with the 3 different types of messages available.
 
+    #include <project.h>
+    #include "usbuart_driver.h"
+
+    int main(void)
+    {
+        uint8 count = 0;
+        uint8 received_data[64];    // Arbitrary array size
+
+        // Initializations
+        CyGlobalIntEnable;  // Enable global interrupts
+        usbuart_init();     // Start and setup the USBUART driver
+    
+        // Application
+        for(;;) {
+            // Single character
+            count = usbuart_getch(received_data);
+            if(count)
+                usbuart_putch(received_data);
+            
+            // Line of characters (a line ends with USBUART_LINE_TERMINATOR)
+            count = usbuart_getline(received_data);
+            if(count)
+                usbuart_putline(received_data, count);
+            
+            // Custom message (see usbuart_driver_msg.h)
+            count = usbuart_getmsg(received_data);
+            if(count)
+                usbuart_putmsg(received_data, count);
+        }
+    }
 
 # Setup
 ## TopDesign
