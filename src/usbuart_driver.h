@@ -84,7 +84,9 @@
 #ifndef _USBUART_DRIVER_H
 #define _USBUART_DRIVER_H
     
-#include "main.h"
+#include <project.h>
+#include <sys/param.h>
+#include <stdbool.h>
 #include "usbuart_driver_msg.h"
 
 /*******************************************************************************
