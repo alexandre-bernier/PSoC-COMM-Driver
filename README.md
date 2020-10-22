@@ -1,5 +1,5 @@
 # PSoC-USBUART-Driver
-Turnkey code for PSoC USBUART component.
+Self-contained implementation of PSoC USBUART component.
 
 Includes 2 FIFO ring buffers for Rx and Tx so we can hold more than the 64 bytes allowed by USBUART.
 
