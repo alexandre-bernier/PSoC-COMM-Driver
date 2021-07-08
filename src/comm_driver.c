@@ -34,14 +34,20 @@
 #include "comm_driver.h"
 #include "ringbuf.h"
 
+// Verify HEAP size
+#if CYDEV_HEAP_SIZE < (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2)
+    #error Invalid HEAP size! You need at least (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2) bytes for comm_driver
+#endif
+
+// TX specific macros
 #if USE_USBUART
     #define COMM_TX_MAX_PACKET_SIZE (64u)
 #elif USE_UART
     #define COMM_TX_MAX_PACKET_SIZE (COMM_UART_TX_BUFFER_SIZE)
 #endif
-
 #define TX_MAX_REJECT (8u)
 
+// Interrupt macros
 #if CY_PSOC5LP
     #define COMM_INT_NB_TICKS (BCLK__BUS_CLK__HZ / COMM_INTERRUPT_FREQ)
     #define SYSTICK_INT_NUM (CY_INT_SYSTICK_IRQN)
