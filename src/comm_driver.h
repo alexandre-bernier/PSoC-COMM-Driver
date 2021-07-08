@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* PSoC USBUART driver using FIFO buffers.
+* PSoC communication driver using FIFO buffers.
 * Copyright (C) 2020, Alexandre Bernier
 *
 * Redistribution and use in source and binary forms, with or without
@@ -40,21 +40,21 @@
 *  ringbuf.c
 *
 * Required components in TopDesign:
-*  1 x USBUART (named 'USBUART')
-*  1 x Clock (set at 2kHz) connected to int_usbuart
-*  1 x ISR (named 'int_usbuart') connected to the clock mentioned above
+*  1 x USBUART or UART (named 'COMM')
 *
 * Configuration of component USBUART (TopDesign):
 *  Descriptor Root = "Manual (Static Allocation)"
 *
-* Clocks configurations (.cydwr):
+* Clocks configurations for USBUART only (.cydwr):
 *  IMO = 24MHz
 *  ILO = 100kHz
 *  USB = 48MHz (IMOx2)
-*  PLL = 79.5MHz (or as high as you want the MASTER_CLK to be)
+*  PLL = 79.5MHz (or as high as you want the CPU clock to be)
 *
-* Macros (see below):
-*  Size of the FIFO buffers (Rx and Tx): see <RX/TX>_BUFFER_SIZE
+* Macros to set (see below):
+*  Select the type of communication block used in your TopDesign.
+*  Set the frequency of the interrupt that will fill/empty RX/TX buffers.
+*  Set the size of the FIFO buffers (Rx and Tx).
 *
 * System configurations (.cydwr):
 *  Heap Size (bytes) = RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2 bytes
@@ -81,49 +81,60 @@
 *
 *******************************************************************************/
 
-#ifndef _USBUART_DRIVER_H
-#define _USBUART_DRIVER_H
+#ifndef _COMM_DRIVER_H
+#define _COMM_DRIVER_H
     
 #include <project.h>
 #include <sys/param.h>
 #include <stdbool.h>
-#include "usbuart_driver_msg.h"
+#include "comm_driver_msg.h"
 
 /*******************************************************************************
 * MACROS
 *******************************************************************************/
+// Select the type of communication block you use.
+// Only one of the following macros should be set to '1'. 
+#define USE_USBUART 1
+#define USE_UART 0
+    
+// The desired frequency of the comm interupts.
+// It will be converted to a number of ticks of the System Clock (SysClk).
+// The frequency entered here cannot be higher than that of the SysClk.
+// The number of ticks (SysClk / COMM_INTERRUPT_FREQ) must fit in a 24-bits register.
+#define COMM_INTERRUPT_FREQ (2000u)
+
 // Size of the buffers
 // Memory allocated will be larger by one byte.
 // Make sure the Heap is large enough.
-#define RX_BUFFER_SIZE (256u)  
-#define TX_BUFFER_SIZE (256u)
+#define RX_BUFFER_SIZE (128u)  
+#define TX_BUFFER_SIZE (512u)
 
 // Index of the USBUART component
 // Shouldn't be changed unless you have more than one USBFS component.
 #define USBFS_DEVICE (0u)
 
 // Terminator of a line of data (limited to a single character)
-#define USBUART_LINE_TERMINATOR ((uint8)'\n')
+#define COMM_LINE_TERMINATOR ((uint8)'\n')
 
 /*******************************************************************************
 * PUBLIC PROTOTYPES
 *******************************************************************************/
 // Init
-void usbuart_init();
+void comm_init();
 
 // Single character
-uint8 usbuart_getch(uint8 *data);
-void usbuart_putch(uint8 *data);
+uint8 comm_getch(uint8 *data);
+void comm_putch(uint8 *data);
 
 // Line
-uint8 usbuart_getline(uint8 *data);
-void usbuart_putline(uint8 *data, uint8 count);
+uint8 comm_getline(uint8 *data);
+void comm_putline(uint8 *data, uint8 count);
 
 // Custom messages
-#ifdef _USBUART_DRIVER_MSG_H
-uint8 usbuart_getmsg(uint8 *data);
-void usbuart_putmsg(uint8 *data, uint8 count);
-#endif // _USBUART_DRIVER_MSG_H
+#ifdef _COMM_DRIVER_MSG_H
+uint8 comm_getmsg(uint8 *data);
+void comm_putmsg(uint8 *data, uint8 count);
+#endif // _COMM_DRIVER_MSG_H
 
-#endif // _USBUART_DRIVER_H
+#endif // _COMM_DRIVER_H
 /* [] END OF FILE */

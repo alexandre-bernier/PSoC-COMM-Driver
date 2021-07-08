@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Custom message structure for USBUART communication.
+* Custom message structure.
 * Copyright (C) 2020, Alexandre Bernier
 *
 * Redistribution and use in source and binary forms, with or without
@@ -41,28 +41,28 @@
 *
 *******************************************************************************/
 
-#ifndef _USBUART_DRIVER_MSG_H
-#define _USBUART_DRIVER_MSG_H
+#ifndef _COMM_DRIVER_MSG_H
+#define _COMM_DRIVER_MSG_H
 
 /*******************************************************************************
 * MACROS
 *******************************************************************************/
 // Header
-#define MSG_FIRST_BYTE ((uint8)0x01)
+#define MSG_FIRST_BYTE ((unsigned char)0x01)
 /* MSG_LENGTH */
 
 // Message
 /* MSG */
 
 // Footer
-#define MSG_LAST_BYTE ((uint8)0x04)
+#define MSG_LAST_BYTE ((unsigned char)'\n')
 
 // Metadata
-#define MSG_HEADER_LENGTH ((uint8)2)
-#define MSG_FOOTER_LENGTH ((uint8)1)
+#define MSG_HEADER_LENGTH ((unsigned char)2)
+#define MSG_FOOTER_LENGTH ((unsigned char)1)
 #define MSG_STRUCTURE_LENGTH (MSG_HEADER_LENGTH + MSG_FOOTER_LENGTH)
-#define MSG_LENGTH_OFFS_FROM_FIRST_BYTE ((uint8)1)
+#define MSG_LENGTH_OFFS_FROM_FIRST_BYTE ((unsigned char)1)
 
-#endif // _USBUART_DRIVER_H
+#endif // _COMM_DRIVER_H
 
 /* [] END OF FILE */

@@ -31,17 +31,30 @@
 *
 *******************************************************************************/
 
-#include "usbuart_driver.h"
+#include "comm_driver.h"
 #include "ringbuf.h"
 
-#define USBUART_MAX_PACKET_SIZE (64u)
+#if USE_USBUART
+    #define COMM_TX_MAX_PACKET_SIZE (64u)
+#elif USE_UART
+    #define COMM_TX_MAX_PACKET_SIZE (COMM_UART_TX_BUFFER_SIZE)
+#endif
+
 #define TX_MAX_REJECT (8u)
+
+#if CY_PSOC5LP
+    #define COMM_INT_NB_TICKS (BCLK__BUS_CLK__HZ / COMM_INTERRUPT_FREQ)
+    #define SYSTICK_INT_NUM (CY_INT_SYSTICK_IRQN)
+#elif CY_PSOC4
+    #define COMM_INT_NB_TICKS (CYDEV_BCLK__SYSCLK__HZ / COMM_INTERRUPT_FREQ)
+    #define SYSTICK_INT_NUM (SysTick_IRQn + 16)
+#endif
 
 /*******************************************************************************
 * PRIVATE VARIABLES
 *******************************************************************************/
-// Buffer to copy bytes from USBUART into FIFO buffers
-uint8 _tempBuffer[USBUART_MAX_PACKET_SIZE];
+// Buffer to copy bytes from communication block into FIFO buffers
+uint8 _tempBuffer[COMM_TX_MAX_PACKET_SIZE];
 
 // RX buffer
 ringbuf_t _rxBuffer; // Circular buffer for RX operations
@@ -55,18 +68,20 @@ uint8 _txReject = 0; // The count of trial rejected by the TX endpoint
 /*******************************************************************************
 * PRIVATE PROTOTYPES
 *******************************************************************************/
+#if USE_USBUART
 void _init_cdc(bool first_init);
-void _usbuart_rx_isr();
-void _usbuart_tx_isr();
+#endif
+void _comm_rx_isr();
+void _comm_tx_isr();
 
 
 /*******************************************************************************
 * INTERRUPTS
 *******************************************************************************/
 // Must be placed after the functions prototypes (or after their definition)
-CY_ISR(int_usbuart_isr) {
-    _usbuart_rx_isr();
-    _usbuart_tx_isr();
+CY_ISR(int_comm_isr) {
+    _comm_rx_isr();
+    _comm_tx_isr();
 }
 
 
@@ -74,10 +89,10 @@ CY_ISR(int_usbuart_isr) {
 * PUBLIC FUNCTIONS
 *******************************************************************************/
 /*******************************************************************************
-* Function Name: usbuart_init
+* Function Name: comm_init
 ********************************************************************************
 * Summary:
-*  Start USBUART and configure it's CDC interface and the interrupts.
+*  Start communication block and configure it and the interrupts.
 *  Should be called once before the infinite loop in your main.
 *   
 * Parameters:
@@ -87,7 +102,7 @@ CY_ISR(int_usbuart_isr) {
 *  None.
 *
 *******************************************************************************/
-void usbuart_init()
+void comm_init()
 {    
     // Allocate memory for the buffers
     _rxBuffer = ringbuf_new(RX_BUFFER_SIZE);
@@ -97,18 +112,30 @@ void usbuart_init()
     ringbuf_reset(_rxBuffer);
     ringbuf_reset(_txBuffer);
     
+#if USE_USBUART
     // Start USBFS component
-    USBUART_Start(USBFS_DEVICE, USBUART_5V_OPERATION);
+    COMM_Start(USBFS_DEVICE, COMM_5V_OPERATION);
     
     // Wait for USBFS enumaration and configure CDC interface
     _init_cdc(true);
+#elif USE_UART
+    // Start UART component
+    COMM_Start();
     
-    // Start periodic interrupts
-    int_usbuart_StartEx(int_usbuart_isr);
+    // Clear COMM buffers
+    COMM_SpiUartClearRxBuffer();
+    COMM_SpiUartClearTxBuffer();
+#endif
+    
+    // Setup interrupt
+    CyIntSetSysVector(SYSTICK_INT_NUM, int_comm_isr);
+    SysTick_Config(COMM_INT_NB_TICKS);
+    NVIC_EnableIRQ(SYSTICK_INT_NUM);
+    CyGlobalIntEnable;  // In case it wasn't done if the main.
 }
 
 /*******************************************************************************
-* Function Name: usbuart_getch
+* Function Name: comm_getch
 ********************************************************************************
 * Summary:
 *  Read a byte from the rxBuffer.
@@ -120,7 +147,7 @@ void usbuart_init()
 *  uint8: The number of bytes copied.
 *
 *******************************************************************************/
-uint8 usbuart_getch(uint8 *data)
+uint8 comm_getch(uint8 *data)
 {
     uint8 count = 1;
     
@@ -130,9 +157,6 @@ uint8 usbuart_getch(uint8 *data)
     
     // Prevent interrupts
     uint8 state = CyEnterCriticalSection();
-    
-    // Check if USBFS configuration has changed
-    _init_cdc(false);
     
     // Extract a single byte from the FIFO buffer
     ringbuf_memcpy_from(data, _rxBuffer, count); 
@@ -144,19 +168,19 @@ uint8 usbuart_getch(uint8 *data)
 }
 
 /*******************************************************************************
-* Function Name: usbuart_putch
+* Function Name: comm_putch
 ********************************************************************************
 * Summary:
 *  Write a byte to the txBuffer.
 *   
 * Parameters:
-*  data: Pointer to a uint8 that will be sent through USBUART.
+*  data: Pointer to a uint8 that will be sent through the COMM block.
 *
 * Return:
 *  None.
 *
 *******************************************************************************/
-void usbuart_putch(uint8 *data)
+void comm_putch(uint8 *data)
 {
     uint8 count = 1;
     uint8 state;
@@ -169,9 +193,6 @@ void usbuart_putch(uint8 *data)
     while(1u) {
         // Prevent interrupts
         state = CyEnterCriticalSection();
-        
-        // Check if USBFS configuration has changed
-        _init_cdc(false);
         
         // Check if there's enough space free in the TX buffer
         if(ringbuf_bytes_free(_txBuffer) >= count) break;
@@ -188,11 +209,11 @@ void usbuart_putch(uint8 *data)
 }
 
 /*******************************************************************************
-* Function Name: usbuart_getline
+* Function Name: comm_getline
 ********************************************************************************
 * Summary:
-*  Read a line from the rxBuffer. A line ends with USBUART_LINE_TERMINATOR
-*  (see usbuart_driver.h).
+*  Read a line from the rxBuffer. A line ends with COMM_LINE_TERMINATOR
+*  (see comm_driver.h).
 *   
 * Parameters:
 *  data: Pointer to an array of uint8 where the bytes read will be copied.
@@ -202,22 +223,19 @@ void usbuart_putch(uint8 *data)
 *  uint8: The number of bytes returned.
 *
 *******************************************************************************/
-uint8 usbuart_getline(uint8 *data)
+uint8 comm_getline(uint8 *data)
 {
     // Exit if 'data' is NULL or if the buffer is empty
     if(!data || ringbuf_is_empty(_rxBuffer))
         return 0;
     
     // Look for a line terminator in the buffer, exit if not found
-    uint16 line_term_offs = ringbuf_findchr(_rxBuffer, USBUART_LINE_TERMINATOR, 0);
+    uint16 line_term_offs = ringbuf_findchr(_rxBuffer, COMM_LINE_TERMINATOR, 0);
     if(line_term_offs == ringbuf_bytes_used(_rxBuffer))
         return 0;
     
     // Prevent interrupts
     uint8 state = CyEnterCriticalSection();
-    
-    // Check if USBFS configuration has changed
-    _init_cdc(false);
     
     // Extract a line from the FIFO buffer (without the line terminator)
     ringbuf_memcpy_from(data, _rxBuffer, line_term_offs);
@@ -232,11 +250,11 @@ uint8 usbuart_getline(uint8 *data)
 }
 
 /*******************************************************************************
-* Function Name: usbuart_putline
+* Function Name: comm_putline
 ********************************************************************************
 * Summary:
-*  Write a line to the txBuffer. The line terminator USBUART_LINE_TERMINATOR
-*  will be appended automatically (see usbuart_driver.h).
+*  Write a line to the txBuffer. The line terminator COMM_LINE_TERMINATOR
+*  will be appended automatically (see comm_driver.h).
 *   
 * Parameters:
 *  data: Pointer to an array of uint8 containing the line to send.
@@ -246,7 +264,7 @@ uint8 usbuart_getline(uint8 *data)
 *  None.
 *
 *******************************************************************************/
-void usbuart_putline(uint8 *data, uint8 count)
+void comm_putline(uint8 *data, uint8 count)
 {
     uint8 state;
     
@@ -259,9 +277,6 @@ void usbuart_putline(uint8 *data, uint8 count)
         // Prevent interrupts
         state = CyEnterCriticalSection();
         
-        // Check if USBFS configuration has changed
-        _init_cdc(false);
-        
         // Check if there's enough space free in the TX buffer
         if(ringbuf_bytes_free(_txBuffer) >= count+1) break;
         
@@ -273,20 +288,20 @@ void usbuart_putline(uint8 *data, uint8 count)
     ringbuf_memcpy_into(_txBuffer, data, count);
     
     // Copy the line terminator into the FIFO buffer
-    uint8 line_terminator = USBUART_LINE_TERMINATOR;
+    uint8 line_terminator = COMM_LINE_TERMINATOR;
     ringbuf_memcpy_into(_txBuffer, &line_terminator, 1);
     
     // Re-enable interrupts
     CyExitCriticalSection(state);
 }
 
-#ifdef _USBUART_DRIVER_MSG_H
+#ifdef _COMM_DRIVER_MSG_H
 /*******************************************************************************
-* Function Name: usbuart_getmsg
+* Function Name: comm_getmsg
 ********************************************************************************
 * Summary:
 *  Read a message from the rxBuffer. A message ends with MSG_LAST_BYTE
-*  (see usbuart_drivermsg.h). It may return '0' if a complete message couldn't
+*  (see comm_driver_msg.h). It may return '0' if a complete message couldn't
 *  be found in the FIFO buffer.
 *   
 * Parameters:
@@ -297,7 +312,7 @@ void usbuart_putline(uint8 *data, uint8 count)
 *  uint8: The number of bytes returned.
 *
 *******************************************************************************/
-uint8 usbuart_getmsg(uint8 *data)
+uint8 comm_getmsg(uint8 *data)
 {
     // Exit if 'data' is NULL or if the buffer is empty
     if(!data || ringbuf_is_empty(_rxBuffer))
@@ -326,6 +341,12 @@ uint8 usbuart_getmsg(uint8 *data)
             return 0;
         msg_length = ringbuf_peek(_rxBuffer, MSG_LENGTH_OFFS_FROM_FIRST_BYTE);
             
+        // Check if message length is valid (smaller than buffer size)
+        if(msg_length >= 100) {
+            ringbuf_remove_from_tail(_rxBuffer, 1);
+            return 0;
+        }
+        
         // Check if MSG_LAST_BYTE is where expected, exit if not enough bytes
         // in FIFO buffer
         if(ringbuf_bytes_used(_rxBuffer) < msg_length)
@@ -341,9 +362,6 @@ uint8 usbuart_getmsg(uint8 *data)
     
     // Prevent interrupts
     uint8 state = CyEnterCriticalSection();
-    
-    // Check if USBFS configuration has changed
-    _init_cdc(false);
     
     // Remove message header from the FIFO buffer
     ringbuf_remove_from_tail(_rxBuffer, MSG_HEADER_LENGTH);
@@ -362,11 +380,11 @@ uint8 usbuart_getmsg(uint8 *data)
 }
 
 /*******************************************************************************
-* Function Name: usbuart_putmsg
+* Function Name: comm_putmsg
 ********************************************************************************
 * Summary:
 *  Write a message to the txBuffer. The message will be padded with the
-*  custom structure found in "usbuart_driver_msg.h".
+*  custom structure found in "comm_driver_msg.h".
 *   
 * Parameters:
 *  data: Pointer to an array of uint8 containing the message to send.
@@ -376,7 +394,7 @@ uint8 usbuart_getmsg(uint8 *data)
 *  None.
 *
 *******************************************************************************/
-void usbuart_putmsg(uint8 *data, uint8 count)
+void comm_putmsg(uint8 *data, uint8 count)
 {
     uint8 state;
     
@@ -390,9 +408,6 @@ void usbuart_putmsg(uint8 *data, uint8 count)
     while(1u) {
         // Prevent interrupts
         state = CyEnterCriticalSection();
-        
-        // Check if USBFS configuration has changed
-        _init_cdc(false);
         
         // Check if there's enough space free in the TX buffer
         if(ringbuf_bytes_free(_txBuffer) >= msg_length) break;
@@ -415,7 +430,7 @@ void usbuart_putmsg(uint8 *data, uint8 count)
     // Re-enable interrupts
     CyExitCriticalSection(state);
 }
-#endif // _USBUART_DRIVER_MSG_H
+#endif // _COMM_DRIVER_MSG_H
 
 
 /*******************************************************************************
@@ -430,33 +445,35 @@ void usbuart_putmsg(uint8 *data, uint8 count)
 *  has changed.
 *   
 * Parameters:
-*  first_init: Must only be 'TRUE' right after the call to USBUART_Start().
+*  first_init: Must only be 'TRUE' right after the call to COMM_Start().
 *
 * Return:
 *  None.
 *
 *******************************************************************************/
+#if USE_USBUART
 void _init_cdc(bool first_init)
 {
     // To do only on first init or if configurations have changed
-    if(first_init || USBUART_IsConfigurationChanged()) {
+    if(first_init || COMM_IsConfigurationChanged()) {
         
         // Wait for USBFS to enumerate
-        while (!USBUART_GetConfiguration());
+        while (!COMM_GetConfiguration());
         
         // Ensure to clear the CHANGE flag
-        USBUART_IsConfigurationChanged();
+        COMM_IsConfigurationChanged();
         
         // Initialize the CDC feature
-        USBUART_CDC_Init();
+        COMM_CDC_Init();
     }
 }
+#endif
 
 /*******************************************************************************
-* Function Name: _usbuart_rx_isr
+* Function Name: _comm_rx_isr
 ********************************************************************************
 * Summary:
-*  Copy all available bytes from USBUART into the RX FIFO buffer.
+*  Copy all available bytes from COMM block into the RX FIFO buffer.
 *   
 * Parameters:
 *  None.
@@ -465,35 +482,59 @@ void _init_cdc(bool first_init)
 *  None.
 *
 *******************************************************************************/
-void _usbuart_rx_isr()
+void _comm_rx_isr()
 {
-    uint16 count = 0;
-    
     // Prevent interrupts
     uint8 state = CyEnterCriticalSection();
     
+#if USE_USBUART
+    uint16 count = 0;
+    
+    // Check if USBFS configuration has changed
+    _init_cdc(false);
+    
     // Check if USBUART has data available
-    if (USBUART_DataIsReady()) {
+    if (COMM_DataIsReady()) {
         
         // Check that the FIFO buffer has enough free space to receive 
-        // all available bytes from USBUART
-        if (USBUART_GetCount() <= ringbuf_bytes_free(_rxBuffer)) {
+        // all available bytes from COMM block
+        if (COMM_GetCount() <= ringbuf_bytes_free(_rxBuffer)) {
             
             // Copy available bytes into the FIFO buffer
-            count = USBUART_GetAll(_tempBuffer);
+            count = COMM_GetAll(_tempBuffer);
             ringbuf_memcpy_into(_rxBuffer, _tempBuffer, count);
         }
     }
+#elif USE_UART
+    uint32 available_bytes = COMM_SpiUartGetRxBufferSize();
+    uint32 byte_read_32 = 0;
+    uint8 byte_read_8;
+    
+    // Check that the FIFO buffer has enough free space to receive 
+    // all available bytes from COMM
+    if (available_bytes <= ringbuf_bytes_free(_rxBuffer)) {
+        
+        // Copy available bytes into the FIFO buffer
+        for(uint32 i=0; i < available_bytes; i++) {
+            byte_read_32 = COMM_SpiUartReadRxData();
+            if(byte_read_32 == 0)
+                continue;
+            byte_read_8 = (uint8)(byte_read_32 & 0xFF);
+            ringbuf_memcpy_into(_rxBuffer, &byte_read_8, 1);
+        }
+    }
+#endif
     
     // Re-enable interrupts
     CyExitCriticalSection(state);
 }
 
 /*******************************************************************************
-* Function Name: _usbuart_tx_isr
+* Function Name: _comm_tx_isr
 ********************************************************************************
 * Summary:
-*  Try to send everything in TX FIFO buffer into USBUART (or up to 64 bytes).
+*  Try to send everything in TX FIFO buffer into the COMM block
+*  (or up to the max available bytes in the COMM block).
 *   
 * Parameters:
 *  None.
@@ -502,7 +543,7 @@ void _usbuart_rx_isr()
 *  None.
 *
 *******************************************************************************/
-void _usbuart_tx_isr()
+void _comm_tx_isr()
 {
     uint16 count = 0;
     
@@ -513,19 +554,52 @@ void _usbuart_tx_isr()
     // Packet is required
     if (!ringbuf_is_empty(_txBuffer) || _txZlpRequired) {
         
+#if USE_USBUART
+        // Check if USBFS configuration has changed
+        _init_cdc(false);
+        
         // Check if USBUART is ready to send data
-        if (USBUART_CDCIsReady()) {
+        if (COMM_CDCIsReady()) {
             
             // Check the amount of bytes in the buffer
-            // Can't send more than USBUART_MAX_PACKET_SIZE bytes
-            count = MIN(ringbuf_bytes_used(_txBuffer), USBUART_MAX_PACKET_SIZE);
+            // Can't send more than COMM_TX_MAX_PACKET_SIZE bytes
+            count = MIN(ringbuf_bytes_used(_txBuffer), COMM_TX_MAX_PACKET_SIZE);
             
             // Send packet
             ringbuf_memcpy_from(_tempBuffer, _txBuffer, count);
-            USBUART_PutData(_tempBuffer, count);
+            COMM_PutData(_tempBuffer, count);
             
             // Clear the buffer
-            _txZlpRequired = (count == USBUART_MAX_PACKET_SIZE);
+            _txZlpRequired = (count == COMM_TX_MAX_PACKET_SIZE);
+            _txReject = 0;
+        }
+        
+        // Discard the TX FIFO buffer content if COMM rejects too many times
+        else if (++_txReject > TX_MAX_REJECT) {
+            ringbuf_reset(_txBuffer);
+            _txReject = 0;
+        }
+        
+        // Expect next time
+        else {
+        }
+        
+#elif USE_UART
+        uint32 uart_bytes_used = COMM_SpiUartGetTxBufferSize();
+        
+        // Check if COMM has room in its TX buffer
+        if (uart_bytes_used == 0) {
+            
+            // Check the amount of bytes in the buffer
+            // Can't send more than COMM_TX_MAX_PACKET_SIZE bytes
+            count = MIN(ringbuf_bytes_used(_txBuffer), COMM_TX_MAX_PACKET_SIZE);
+            
+            // Send packet
+            ringbuf_memcpy_from(_tempBuffer, _txBuffer, count);
+            COMM_SpiUartPutArray(_tempBuffer, count);
+            
+            // Clear the buffer
+            _txZlpRequired = (count == COMM_TX_MAX_PACKET_SIZE);
             _txReject = 0;
         }
         
@@ -538,6 +612,7 @@ void _usbuart_tx_isr()
         // Expect next time
         else {
         }
+#endif
     }
     
     // Re-enable interrupts
