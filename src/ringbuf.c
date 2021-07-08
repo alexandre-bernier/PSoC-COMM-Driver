@@ -382,7 +382,7 @@ ringbuf_peek(ringbuf_t rb, size_t offset)
     
     const uint8_t *bufend = ringbuf_end(rb);
     uint8_t *address;
-    if ((rb->tail + offset) > bufend)
+    if ((rb->tail + offset) >= bufend)
         address = rb->buf + (offset - (bufend - rb->tail));
     else
         address = rb->tail + offset;
