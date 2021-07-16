@@ -620,8 +620,8 @@ void _comm_tx_isr()
         // Expect next time
         else {
         }
-#endif
     }
+#endif
     
     // Re-enable interrupts
     CyExitCriticalSection(state);
