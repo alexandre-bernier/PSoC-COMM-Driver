@@ -34,16 +34,23 @@
 #include "comm_driver.h"
 #include "ringbuf.h"
 
-// Verify HEAP size
-#if CYDEV_HEAP_SIZE < (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2)
-    #error Invalid HEAP size! You need at least (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2) bytes for comm_driver
+// Verification
+#if USE_USBUART || USE_UART
+    #if CYDEV_HEAP_SIZE < (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2)
+        #error Invalid HEAP size! You need at least (RX_BUFFER_SIZE + TX_BUFFER_SIZE + 2) bytes for comm_driver
+    #endif
 #endif
-
+#if !USE_USBUART && !USE_UART
+    #warning Both USE_USBUART and USE_UART are set to '0'
+#endif
+    
 // TX specific macros
 #if USE_USBUART
     #define COMM_TX_MAX_PACKET_SIZE (64u)
 #elif USE_UART
     #define COMM_TX_MAX_PACKET_SIZE (COMM_UART_TX_BUFFER_SIZE)
+#else
+    #define COMM_TX_MAX_PACKET_SIZE (0u)
 #endif
 #define TX_MAX_REJECT (8u)
 
@@ -67,8 +74,10 @@ ringbuf_t _rxBuffer; // Circular buffer for RX operations
 
 // TX buffer
 ringbuf_t _txBuffer; // Circular buffer for TX operations
+#if USE_USBUART
 bool _txZlpRequired = false; // Flag to indicate the ZLP is required
 uint8 _txReject = 0; // The count of trial rejected by the TX endpoint
+#endif
 
 
 /*******************************************************************************
@@ -556,11 +565,11 @@ void _comm_tx_isr()
     // Prevent interrupts
     uint8 state = CyEnterCriticalSection();
     
+#if USE_USBUART
     // Check if there's anything in the TX FIFO buffer or if a Zero Length
     // Packet is required
     if (!ringbuf_is_empty(_txBuffer) || _txZlpRequired) {
         
-#if USE_USBUART
         // Check if USBFS configuration has changed
         _init_cdc(false);
         
@@ -591,6 +600,9 @@ void _comm_tx_isr()
         }
         
 #elif USE_UART
+    // Check if there's anything in the TX FIFO buffer
+    if (!ringbuf_is_empty(_txBuffer)) {
+        
         uint32 uart_bytes_used = COMM_SpiUartGetTxBufferSize();
         
         // Check if COMM has room in its TX buffer
@@ -603,16 +615,6 @@ void _comm_tx_isr()
             // Send packet
             ringbuf_memcpy_from(_tempBuffer, _txBuffer, count);
             COMM_SpiUartPutArray(_tempBuffer, count);
-            
-            // Clear the buffer
-            _txZlpRequired = (count == COMM_TX_MAX_PACKET_SIZE);
-            _txReject = 0;
-        }
-        
-        // Discard the TX FIFO buffer content if USBUART rejects too many times
-        else if (++_txReject > TX_MAX_REJECT) {
-            ringbuf_reset(_txBuffer);
-            _txReject = 0;
         }
         
         // Expect next time

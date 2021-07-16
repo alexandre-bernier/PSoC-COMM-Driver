@@ -94,6 +94,7 @@
 *******************************************************************************/
 // Select the type of communication block you use.
 // Only one of the following macros should be set to '1'. 
+// You can also disable the driver by putting all following macros to '0'.
 #define USE_USBUART 1
 #define USE_UART 0
     
@@ -107,7 +108,7 @@
 // Memory allocated will be larger by one byte.
 // Make sure the Heap is large enough.
 #define RX_BUFFER_SIZE (128u)  
-#define TX_BUFFER_SIZE (512u)
+#define TX_BUFFER_SIZE (128u)
 
 // Index of the USBUART component
 // Shouldn't be changed unless you have more than one USBFS component.
