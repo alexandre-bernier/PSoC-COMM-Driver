@@ -598,6 +598,7 @@ void _comm_tx_isr()
         // Expect next time
         else {
         }
+    }
         
 #elif USE_UART
     // Check if there's anything in the TX FIFO buffer
@@ -622,7 +623,7 @@ void _comm_tx_isr()
         }
     }
 #endif
-    
+
     // Re-enable interrupts
     CyExitCriticalSection(state);
 }
