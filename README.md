@@ -75,6 +75,13 @@ Descriptor Root = "Manual (Static Allocation)"
     (+ 512 bytes if you use 'sprintf' in your project)
     
     (+ any more heap required for your application)
+    
+## Libraries
+You will need to add the 'math' library to the linker. Not doing so will not show any errors during compilation or runtime, but the communication may still not work without any indications of what's wrong. Here are the steps:
+1. Right-click on your project in the 'Workspace Explorer' and click on 'Build Settings...'.
+2. In the left panel of the window, find the 'Linker' item. It should be inside the compiler item (which can look like 'ARM GCC 5.4-2016-q2-update').
+3. In the 'Additional Libraries' field, simply add the letter 'm' (lower case).
+4. Done! Click 'OK' to save your changes and close the window.
 
 ## Custom messages
 If you want to send/receive messages with a custom structure, make sure this line is uncommented:
